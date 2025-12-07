@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "../../../lib/supabaseClient";
+import { supabase } from "../../lib/supabaseClient.ts";
 
 type Task = {
   id: string;
@@ -14,24 +14,36 @@ export default function TodayDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Helper to get today’s date range
+  function getTodayRange() {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+
+    return { start: start.toISOString(), end: end.toISOString() };
+  }
+
   async function fetchTasks() {
     setLoading(true);
     setError(null);
 
     try {
-      // TODO:
-      // - Query tasks that are due today and not completed
-      // - Use supabase.from("tasks").select(...)
-      // - You can do date filtering in SQL or client-side
+      const { start, end } = getTodayRange();
 
-      // Example:
-      // const { data, error } = await supabase
-      //   .from("tasks")
-      //   .select("*")
-      //   .eq("status", "open");
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("*")
+        .neq("status", "completed")          // not completed
+        .gte("due_at", start)                // due today
+        .lte("due_at", end)
+        .order("due_at", { ascending: true });
 
-      setTasks([]);
-    } catch (err: any) {
+      if (error) throw error;
+
+      setTasks(data || []);
+    } catch (err) {
       console.error(err);
       setError("Failed to load tasks");
     } finally {
@@ -41,10 +53,16 @@ export default function TodayDashboard() {
 
   async function markComplete(id: string) {
     try {
-      // TODO:
-      // - Update task.status to 'completed'
-      // - Re-fetch tasks or update state optimistically
-    } catch (err: any) {
+      const { error } = await supabase
+        .from("tasks")
+        .update({ status: "completed" })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      // Refresh task list
+      fetchTasks();
+    } catch (err) {
       console.error(err);
       alert("Failed to update task");
     }
@@ -63,7 +81,7 @@ export default function TodayDashboard() {
       {tasks.length === 0 && <p>No tasks due today 🎉</p>}
 
       {tasks.length > 0 && (
-        <table>
+        <table style={{ marginTop: "1rem", borderCollapse: "collapse" }}>
           <thead>
             <tr>
               <th>Type</th>
@@ -73,6 +91,7 @@ export default function TodayDashboard() {
               <th>Action</th>
             </tr>
           </thead>
+
           <tbody>
             {tasks.map((t) => (
               <tr key={t.id}>
